@@ -36,7 +36,7 @@ class TransformerDecoderLayer(nn.Module):
             self.self_attn = AverageAttention(d_model, dropout=dropout)
 
         self.context_attn = MultiHeadedAttention(
-            heads, d_model, dropout=dropout)
+            heads, d_model, dropout=dropout, attn_func=attn_func)
         self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.layer_norm_1 = nn.LayerNorm(d_model, eps=1e-6)
         self.layer_norm_2 = nn.LayerNorm(d_model, eps=1e-6)
