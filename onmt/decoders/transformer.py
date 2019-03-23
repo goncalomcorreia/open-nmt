@@ -23,13 +23,15 @@ class TransformerDecoderLayer(nn.Module):
     """
 
     def __init__(self, d_model, heads, d_ff, dropout,
-                 self_attn_type="scaled-dot", max_relative_positions=0):
+                 self_attn_type="scaled-dot", max_relative_positions=0,
+                 attn_func="softmax"):
         super(TransformerDecoderLayer, self).__init__()
 
         if self_attn_type == "scaled-dot":
             self.self_attn = MultiHeadedAttention(
                 heads, d_model, dropout=dropout,
-                max_relative_positions=max_relative_positions)
+                max_relative_positions=max_relative_positions,
+                attn_func=attn_func)
         elif self_attn_type == "average":
             self.self_attn = AverageAttention(d_model, dropout=dropout)
 
@@ -121,7 +123,7 @@ class TransformerDecoder(DecoderBase):
 
     def __init__(self, num_layers, d_model, heads, d_ff,
                  copy_attn, self_attn_type, dropout, embeddings,
-                 max_relative_positions):
+                 max_relative_positions, global_attention_function):
         super(TransformerDecoder, self).__init__()
 
         self.embeddings = embeddings
@@ -132,7 +134,8 @@ class TransformerDecoder(DecoderBase):
         self.transformer_layers = nn.ModuleList(
             [TransformerDecoderLayer(d_model, heads, d_ff, dropout,
              self_attn_type=self_attn_type,
-             max_relative_positions=max_relative_positions)
+             max_relative_positions=max_relative_positions,
+             attn_func=global_attention_function)
              for i in range(num_layers)])
 
         # previously, there was a GlobalAttention module here for copy
@@ -153,7 +156,8 @@ class TransformerDecoder(DecoderBase):
             opt.self_attn_type,
             opt.dropout,
             embeddings,
-            opt.max_relative_positions)
+            opt.max_relative_positions,
+            opt.global_attention_function)
 
     def init_state(self, src, memory_bank, enc_hidden):
         """Initialize decoder state."""

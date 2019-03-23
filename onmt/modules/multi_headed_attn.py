@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from onmt.utils.misc import generate_relative_positions_matrix,\
                             relative_matmul
+from onmt.modules.sparse_activations import Sparsemax, Tsallis15
 # from onmt.utils.misc import aeq
 
 
@@ -49,7 +50,7 @@ class MultiHeadedAttention(nn.Module):
     """
 
     def __init__(self, head_count, model_dim, dropout=0.1,
-                 max_relative_positions=0):
+                 max_relative_positions=0, attn_func="softmax"):
         assert model_dim % head_count == 0
         self.dim_per_head = model_dim // head_count
         self.model_dim = model_dim
@@ -63,7 +64,13 @@ class MultiHeadedAttention(nn.Module):
                                        head_count * self.dim_per_head)
         self.linear_query = nn.Linear(model_dim,
                                       head_count * self.dim_per_head)
-        self.softmax = nn.Softmax(dim=-1)
+
+        if attn_func == 'softmax':
+            self.softmax = nn.Softmax(dim=-1)
+        elif attn_func == 'sparsemax':
+            self.softmax = Sparsemax(dim=-1)
+        elif attn_func == 'entmax':
+            self.softmax = Tsallis15(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
 
