@@ -50,7 +50,8 @@ class MultiHeadedAttention(nn.Module):
     """
 
     def __init__(self, head_count, model_dim, dropout=0.1,
-                 max_relative_positions=0, attn_func="softmax"):
+                 max_relative_positions=0, attn_func="softmax",
+                 no_attn_drop=False):
         assert model_dim % head_count == 0
         self.dim_per_head = model_dim // head_count
         self.model_dim = model_dim
@@ -73,6 +74,7 @@ class MultiHeadedAttention(nn.Module):
             self.softmax = Tsallis15(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
+        self.no_attn_drop = no_attn_drop
 
         self.max_relative_positions = max_relative_positions
 
@@ -208,7 +210,7 @@ class MultiHeadedAttention(nn.Module):
 
         # 3) Apply attention dropout and compute context vectors.
         attn = self.softmax(scores).to(query.dtype)
-        drop_attn = self.dropout(attn)
+        drop_attn = attn if self.no_attn_drop else self.dropout(attn)
 
         context_original = torch.matmul(drop_attn, value)
 

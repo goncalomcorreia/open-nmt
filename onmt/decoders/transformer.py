@@ -24,19 +24,20 @@ class TransformerDecoderLayer(nn.Module):
 
     def __init__(self, d_model, heads, d_ff, dropout,
                  self_attn_type="scaled-dot", max_relative_positions=0,
-                 attn_func="softmax"):
+                 attn_func="softmax", no_attn_drop=False):
         super(TransformerDecoderLayer, self).__init__()
 
         if self_attn_type == "scaled-dot":
             self.self_attn = MultiHeadedAttention(
                 heads, d_model, dropout=dropout,
                 max_relative_positions=max_relative_positions,
-                attn_func=attn_func)
+                attn_func=attn_func, no_attn_drop=no_attn_drop)
         elif self_attn_type == "average":
             self.self_attn = AverageAttention(d_model, dropout=dropout)
 
         self.context_attn = MultiHeadedAttention(
-            heads, d_model, dropout=dropout, attn_func=attn_func)
+            heads, d_model, dropout=dropout, attn_func=attn_func,
+            no_attn_drop=no_attn_drop)
         self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.layer_norm_1 = nn.LayerNorm(d_model, eps=1e-6)
         self.layer_norm_2 = nn.LayerNorm(d_model, eps=1e-6)
@@ -123,7 +124,8 @@ class TransformerDecoder(DecoderBase):
 
     def __init__(self, num_layers, d_model, heads, d_ff,
                  copy_attn, self_attn_type, dropout, embeddings,
-                 max_relative_positions, global_attention_function):
+                 max_relative_positions, global_attention_function,
+                 no_attn_drop):
         super(TransformerDecoder, self).__init__()
 
         self.embeddings = embeddings
@@ -135,7 +137,8 @@ class TransformerDecoder(DecoderBase):
             [TransformerDecoderLayer(d_model, heads, d_ff, dropout,
              self_attn_type=self_attn_type,
              max_relative_positions=max_relative_positions,
-             attn_func=global_attention_function)
+             attn_func=global_attention_function,
+             no_attn_drop=no_attn_drop)
              for i in range(num_layers)])
 
         # previously, there was a GlobalAttention module here for copy
@@ -157,7 +160,8 @@ class TransformerDecoder(DecoderBase):
             opt.dropout,
             embeddings,
             opt.max_relative_positions,
-            opt.global_attention_function)
+            opt.global_attention_function,
+            opt.no_attn_drop)
 
     def init_state(self, src, memory_bank, enc_hidden):
         """Initialize decoder state."""
