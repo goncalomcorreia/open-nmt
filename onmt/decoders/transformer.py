@@ -80,6 +80,8 @@ class TransformerDecoderLayer(nn.Module):
             query, attn = self.self_attn(input_norm, mask=dec_mask,
                                          layer_cache=layer_cache, step=step)
 
+        attns = {"self": attn}
+
         query = self.drop(query) + inputs
 
         query_norm = self.layer_norm_2(query)
@@ -89,7 +91,8 @@ class TransformerDecoderLayer(nn.Module):
                                       type="context")
         output = self.feed_forward(self.drop(mid) + query)
 
-        return output, attn
+        attns["context"] = attn
+        return output, attns
 
 
 class TransformerDecoder(DecoderBase):
@@ -205,6 +208,7 @@ class TransformerDecoder(DecoderBase):
         src_pad_mask = src_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_src]
         tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
 
+        attn_output = []
         for i, layer in enumerate(self.transformer_layers):
             layer_cache = self.state["cache"]["layer_{}".format(i)] \
                 if step is not None else None
@@ -215,14 +219,22 @@ class TransformerDecoder(DecoderBase):
                 tgt_pad_mask,
                 layer_cache=layer_cache,
                 step=step)
+            attn_output.append(attn)
 
         output = self.layer_norm(output)
         dec_outs = output.transpose(0, 1).contiguous()
-        attn = attn.transpose(0, 1).contiguous()
+        attn = attn['context'][:, 0, :, :].transpose(0, 1).contiguous()
 
         attns = {"std": attn}
         if self._copy:
             attns["copy"] = attn
+
+        attns["self"] = torch.cat(
+            [x['self'].transpose(
+                1, 2).contiguous().unsqueeze(0) for x in attn_output], dim=0)
+        attns["context"] = torch.cat(
+            [x['context'].transpose(
+                1, 2).contiguous().unsqueeze(0) for x in attn_output], dim=0)
 
         # TODO change the way attns is returned dict => list or tuple (onnx)
         return dec_outs, attns
