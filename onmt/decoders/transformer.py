@@ -230,10 +230,10 @@ class TransformerDecoder(DecoderBase):
             attns["copy"] = attn
 
         attns["self"] = torch.cat(
-            [x['self'].transpose(
+            [x['self'].transpose(0, 1).transpose(
                 1, 2).contiguous().unsqueeze(0) for x in attn_output], dim=0)
         attns["context"] = torch.cat(
-            [x['context'].transpose(
+            [x['context'].transpose(0, 1).transpose(
                 1, 2).contiguous().unsqueeze(0) for x in attn_output], dim=0)
 
         # TODO change the way attns is returned dict => list or tuple (onnx)
