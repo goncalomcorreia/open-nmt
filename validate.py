@@ -32,7 +32,9 @@ class Validator(object):
         # Set model in validating mode.
         stats = {'support': 0, 'tgt_words': 0, 'src_words': 0,
                  'attended': 0, 'attended_possible': 0,
-                 'self_attended_possible': 0}
+                 'self_attended_possible': 0,
+                 'enc_self_attended_possible': 0}
+        N_JS_div_enc = 0
         N_JS_div = 0
         with torch.no_grad():
             for batch in valid_iter:
@@ -53,8 +55,12 @@ class Validator(object):
                 grid_sizes = src_lengths * tgt_lengths
                 stats['attended_possible'] += grid_sizes.sum().item()
 
-                self_grid_sizes = tgt_lengths * tgt_lengths
+                self_grid_sizes = tgt_lengths * (tgt_lengths + 1) / 2
                 stats['self_attended_possible'] += self_grid_sizes.sum().item()
+
+                enc_self_grid_sizes = src_lengths * src_lengths
+                stats['enc_self_attended_possible'] += \
+                    enc_self_grid_sizes.sum().item()
 
                 out_support = generator_out.gt(0).sum(dim=1)
                 tgt_non_pad = tgt[1:].ne(self.tgt_padding_idx).view(-1)
@@ -68,8 +74,44 @@ class Validator(object):
                 attended = attn.gt(0).sum(dim=1)
                 attended_non_pad = attended.masked_select(tgt_non_pad)
                 stats['attended'] += attended_non_pad.sum().item()
-
                 stats['n_layers'] = attns['self'].size(0)
+
+                self_attn = attns['encoder_attn']
+                src_non_pad = src.ne(self.tgt_padding_idx).view(-1)
+                for ii, layer in enumerate(self_attn):
+                    if 'enc_self_layer_%i' % (ii) not in stats.keys():
+                        # number of heads
+                        stats['enc_self_layer_%i' % (ii)] = [0] * layer.size(0)
+                        stats['head_sum_enc_self_layer_%i' % (ii)] = 0
+                        stats['JS_div_enc_self_layer_%i' % (ii)] = 0
+                    for jj, head in enumerate(layer):
+                        head = head.view(-1, head.size(-1))
+                        attended = head.gt(0).sum(dim=1)
+                        attended_non_pad = attended.masked_select(src_non_pad)
+                        stats['enc_self_layer_%i' % (ii)][jj] += \
+                            attended_non_pad.sum().item()
+
+                    head_sum = layer.sum(0).view(-1, head.size(-1))
+                    attended = head_sum.gt(0).sum(dim=1)
+                    attended_non_pad = attended.masked_select(src_non_pad)
+                    stats['head_sum_enc_self_layer_%i' % (ii)] += \
+                        attended_non_pad.sum().item()
+
+                    JS_div = \
+                        (shannon_entropy(
+                            (layer.sum(0) / layer.size(0)).view(
+                                -1, layer.size(-1))) -
+                         (shannon_entropy(layer) / layer.size(0)).sum(0).view(
+                            -1)).masked_select(src_non_pad)
+
+                    stats['JS_div_enc_self_layer_%i' % (ii)] += \
+                        (JS_div /
+                            torch.log(
+                                JS_div.new_ones(JS_div.size())*layer.size(0)
+                                )).sum().item()
+
+                N_JS_div_enc += len(JS_div)
+
                 self_attn = attns['self']
                 for ii, layer in enumerate(self_attn):
                     if 'self_layer_%i' % (ii) not in stats.keys():
@@ -89,24 +131,6 @@ class Validator(object):
                     attended_non_pad = attended.masked_select(tgt_non_pad)
                     stats['head_sum_self_layer_%i' % (ii)] += \
                         attended_non_pad.sum().item()
-
-                    # n_heads = layer.size(0)
-                    # N_lens = tgt_lengths.repeat(layer.size(1))
-                    # n_ij_att = layer.gt(0).sum(0).view(-1, layer.size(-1))
-                    # n_ij_no_att = layer.eq(0).sum(0).view(-1, layer.size(-1))
-                    # p_att = \
-                    #     n_ij_att.sum(-1).masked_select(
-                    #         tgt_non_pad).float() / \
-                    #     (N_lens*n_heads).masked_select(
-                    #         tgt_non_pad).float()
-                    # p_no_att = 1 - p_att
-                    # P_i = (n_ij_att**2 + n_ij_no_att**2 - n_heads).float()/\
-                    #     (n_heads*(n_heads-1))
-
-                    # P_bar = P_i.sum(-1)/P_i.size(-1)
-                    # P_bar = P_bar.masked_select(tgt_non_pad)
-                    # P_bar_e = p_att**2 + p_no_att**2
-                    # kappa = (P_bar - P_bar_e)/(1 - P_bar_e)
 
                     JS_div = \
                         (shannon_entropy(
@@ -141,24 +165,6 @@ class Validator(object):
                     stats['head_sum_context_layer_%i' % (ii)] += \
                         attended_non_pad.sum().item()
 
-                    # n_heads = layer.size(0)
-                    # N_lens = tgt_lengths.repeat(layer.size(1))
-                    # n_ij_att = layer.gt(0).sum(0).view(-1, layer.size(-1))
-                    # n_ij_no_att = layer.eq(0).sum(0).view(-1, layer.size(-1))
-                    # p_att = \
-                    #     n_ij_att.sum(-1).masked_select(
-                    #         tgt_non_pad).float() / \
-                    #     (N_lens*n_heads).masked_select(
-                    #         tgt_non_pad).float()
-                    # p_no_att = 1 - p_att
-                    # P_i = (n_ij_att**2 + n_ij_no_att**2 - n_heads).float()/\
-                    #     (n_heads*(n_heads-1))
-
-                    # P_bar = P_i.sum(-1)/P_i.size(-1)
-                    # P_bar = P_bar.masked_select(tgt_non_pad)
-                    # P_bar_e = p_att**2 + p_no_att**2
-                    # kappa = (P_bar - P_bar_e)/(1 - P_bar_e)
-
                     JS_div = \
                         (shannon_entropy(
                             (layer.sum(0) / layer.size(0)).view(
@@ -175,27 +181,9 @@ class Validator(object):
                 N_JS_div += len(JS_div)
 
             for ii in range(len(self.model.decoder.transformer_layers)):
-
+                stats['JS_div_enc_self_layer_%i' % (ii)] /= N_JS_div_enc
                 stats['JS_div_self_layer_%i' % (ii)] /= N_JS_div
                 stats['JS_div_context_layer_%i' % (ii)] /= N_JS_div
-
-                '''
-                print(src.size())
-                print(tgt.size())
-                foo = attns['std'].squeeze(1)
-                print(foo.size())
-                print(foo.sum())
-                # what's going on here: the tgt is size 10, the src is size 8,
-                # the attention is (9 x 8).
-                print('attn nonzeros', foo.gt(0).sum().item())
-                print('total src words', src_lengths.sum().item())
-                print('total tgt words', tgt_lengths.sum().item())
-                print('src seq',
-                      [self.fields['src'].vocab.itos[i] for i in src])
-                print('tgt seq',
-                      [self.fields['tgt'].vocab.itos[i] for i in tgt])
-                print(foo)
-                '''
 
         return stats
 
@@ -276,13 +264,57 @@ def main(opt):
             "valid", fields, checkpoint['opt'], is_train=False)
 
         valid_stats = validator.validate(valid_iter)
-        print('avg. attended positions/tgt word: {}'.format(
-            valid_stats['attended'] / valid_stats['tgt_words']))
+        # print('avg. attended positions/tgt word: {}'.format(
+        #     valid_stats['attended'] / valid_stats['tgt_words']))
         print('avg. support size: {}'.format(
             valid_stats['support'] / valid_stats['tgt_words']))
-        print('attention density: {}'.format(
-            valid_stats['attended'] / valid_stats['attended_possible']))
+        # print('attention density: {}'.format(
+        #     valid_stats['attended'] / valid_stats['attended_possible']))
 
+        # ENC SELF ATT
+        for ii in range(valid_stats['n_layers']):
+
+            density_per_head = \
+                [x / valid_stats['enc_self_attended_possible']
+                 for x in valid_stats['enc_self_layer_%i' % (ii)]]
+
+            density_per_head.sort()
+            density_per_head = \
+                [float('%.2f' % elem) for elem in density_per_head]
+
+            print(
+                ('enc_self att density in layer %i, per head (sorted): {}'
+                 % (ii)
+                 ).format(density_per_head)
+            )
+
+            print(
+                ('average enc_self att density in layer %i: {}'
+                 % (ii)
+                 ).format(
+                    "%.2f" % (sum(density_per_head) / len(density_per_head)))
+            )
+
+            union_of_heads = \
+                valid_stats[
+                    'head_sum_enc_self_layer_%i' % (ii)
+                    ] / valid_stats['attended_possible']
+            print(
+                ('sum of heads enc_self att density in layer %i: {}'
+                 % (ii)
+                 ).format("%.2f" % union_of_heads)
+            )
+
+            print(
+                ('JS_div of head disagreement in enc_self layer %i: {}'
+                 % (ii)
+                 ).format(
+                    "%.2f" % (valid_stats['JS_div_enc_self_layer_%i' % (ii)]))
+            )
+
+        print('\n')
+
+        # SELF ATT
         for ii in range(valid_stats['n_layers']):
 
             density_per_head = \
@@ -294,13 +326,13 @@ def main(opt):
                 [float('%.2f' % elem) for elem in density_per_head]
 
             print(
-                ('self attention density in layer %i, per head (sorted): {}'
+                ('self att density in layer %i, per head (sorted): {}'
                  % (ii)
                  ).format(density_per_head)
             )
 
             print(
-                ('average self attention density in layer %i: {}'
+                ('average self att density in layer %i: {}'
                  % (ii)
                  ).format(
                     "%.2f" % (sum(density_per_head) / len(density_per_head)))
@@ -311,19 +343,21 @@ def main(opt):
                     'head_sum_self_layer_%i' % (ii)
                     ] / valid_stats['attended_possible']
             print(
-                ('sum of heads self attention density in layer %i: {}'
+                ('sum of heads self att density in layer %i: {}'
                  % (ii)
                  ).format("%.2f" % union_of_heads)
             )
 
             print(
-                ('JS_div of head agreement in self layer %i: {}'
+                ('JS_div of head disagreement in self layer %i: {}'
                  % (ii)
                  ).format(
                     "%.2f" % (valid_stats['JS_div_self_layer_%i' % (ii)]))
             )
 
         print('\n')
+
+        # CONTEXT ATT
 
         for ii in range(valid_stats['n_layers']):
 
@@ -336,13 +370,13 @@ def main(opt):
                 [float('%.2f' % elem) for elem in density_per_head]
 
             print(
-                ('context attention density in layer %i, per head (sorted): {}'
+                ('context att density in layer %i, per head (sorted): {}'
                  % (ii)
                  ).format(density_per_head)
             )
 
             print(
-                ('average context attention density in layer %i: {}'
+                ('average context att density in layer %i: {}'
                  % (ii)
                  ).format(
                     "%.2f" % (sum(density_per_head) / len(density_per_head)))
@@ -353,17 +387,19 @@ def main(opt):
                     'head_sum_context_layer_%i' % (ii)
                     ] / valid_stats['attended_possible']
             print(
-                ('sum of heads context attention density in layer %i: {}'
+                ('sum of heads context att density in layer %i: {}'
                  % (ii)
                  ).format("%.2f" % union_of_heads)
             )
 
             print(
-                ('JS_div of head agreement in context layer %i: {}'
+                ('JS_div of head disagreement in context layer %i: {}'
                  % (ii)
                  ).format(
                     "%.2f" % (valid_stats['JS_div_context_layer_%i' % (ii)]))
             )
+
+        print('\n')
 
 
 if __name__ == "__main__":

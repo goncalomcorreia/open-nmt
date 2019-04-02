@@ -44,4 +44,7 @@ class NMTModel(nn.Module):
             self.decoder.init_state(src, memory_bank, enc_state)
         dec_out, attns = self.decoder(tgt, memory_bank,
                                       memory_lengths=lengths)
+
+        if hasattr(self.encoder, 'self_attns'):
+            attns['encoder_attn'] = self.encoder.self_attns
         return dec_out, attns

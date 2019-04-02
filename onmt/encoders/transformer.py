@@ -3,6 +3,7 @@ Implementation of "Attention is All You Need"
 """
 
 import torch.nn as nn
+import torch
 
 from onmt.encoders.encoder import EncoderBase
 from onmt.modules import MultiHeadedAttention
@@ -47,10 +48,11 @@ class TransformerEncoderLayer(nn.Module):
             * outputs ``(batch_size, src_len, model_dim)``
         """
         input_norm = self.layer_norm(inputs)
-        context, _ = self.self_attn(input_norm, input_norm, input_norm,
-                                    mask=mask, type="self")
+        context, attn = self.self_attn(
+            input_norm, input_norm, input_norm,
+            mask=mask, type="self")
         out = self.dropout(context) + inputs
-        return self.feed_forward(out)
+        return self.feed_forward(out), attn
 
 
 class TransformerEncoder(EncoderBase):
@@ -125,8 +127,15 @@ class TransformerEncoder(EncoderBase):
         padding_idx = self.embeddings.word_padding_idx
         mask = words.data.eq(padding_idx).unsqueeze(1)  # [B, 1, T]
         # Run the forward pass of every layer of the tranformer.
+        attn_output = []
         for layer in self.transformer:
-            out = layer(out, mask)
+            out, attn = layer(out, mask)
+            attn_output.append(attn)
         out = self.layer_norm(out)
+
+        attn = torch.cat(
+            [x.transpose(0, 1).transpose(
+                1, 2).contiguous().unsqueeze(0) for x in attn_output], dim=0)
+        self.self_attns = attn
 
         return emb, out.transpose(0, 1).contiguous(), lengths
