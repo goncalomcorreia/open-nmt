@@ -159,6 +159,8 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
     if not model_opt.copy_attn:
         if model_opt.generator_function == "sparsemax":
             gen_func = onmt.modules.sparse_activations.LogSparsemax(dim=-1)
+        elif model_opt.generator_function == "entmax":
+            gen_func = onmt.modules.sparse_activations.LogTsallis15TopK(dim=-1)
         else:
             gen_func = nn.LogSoftmax(dim=-1)
         generator = nn.Sequential(

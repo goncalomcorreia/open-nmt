@@ -158,7 +158,7 @@ def model_opts(parser):
     group.add('--copy_attn', '-copy_attn', action="store_true",
               help='Train copy attention layer.')
     group.add('--generator_function', '-generator_function', default="softmax",
-              choices=["softmax", "sparsemax"],
+              choices=["softmax", "sparsemax", "entmax"],
               help="Which function to use for generating "
                    "probabilities over the target vocabulary (choices: "
                    "softmax, sparsemax)")

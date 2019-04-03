@@ -48,7 +48,7 @@ def _threshold_and_support(input, dim=0):
     return tau, support_size
 
 
-def _threshold_and_support_topk(input, dim=0, k=100):
+def _threshold_and_support_topk(input, dim=0, k=512):
     """
     Sparsemax building block: compute the threshold
     Parameters:
@@ -118,7 +118,7 @@ class SparsemaxFunction(Function):
 class SparsemaxFunctionTopK(Function):
 
     @staticmethod
-    def forward(ctx, input, dim=0, k=100):
+    def forward(ctx, input, dim=0, k=512):
         """
         sparsemax: normalizing sparse transform (a la softmax)
         Parameters:
@@ -156,7 +156,7 @@ class Sparsemax(nn.Module):
 
 class SparsemaxTopK(nn.Module):
 
-    def __init__(self, dim=0, k=100):
+    def __init__(self, dim=0, k=512):
         self.dim = dim
         self.k = k
         super(SparsemaxTopK, self).__init__()
@@ -177,7 +177,7 @@ class LogSparsemax(nn.Module):
 
 class LogSparsemaxTopK(nn.Module):
 
-    def __init__(self, dim=0, k=100):
+    def __init__(self, dim=0, k=512):
         self.dim = dim
         self.k = k
         super(LogSparsemaxTopK, self).__init__()
@@ -206,7 +206,7 @@ def _tsallis_threshold_and_support(input, dim=0):
     return tau_star, support_size
 
 
-def _tsallis_threshold_and_support_topk(input, dim=0, k=100):
+def _tsallis_threshold_and_support_topk(input, dim=0, k=512):
 
     if k >= input.shape[dim]:  # do full sort
         Xsrt, _ = torch.sort(input, dim=dim, descending=True)
@@ -267,7 +267,7 @@ class Tsallis15Function(Function):
 
 class Tsallis15TopKFunction(Tsallis15Function):
     @staticmethod
-    def forward(ctx, X, dim=0, k=100):
+    def forward(ctx, X, dim=0, k=512):
         ctx.dim = dim
 
         max_val, _ = X.max(dim=dim, keepdim=True)
@@ -311,7 +311,7 @@ class LogTsallis15(torch.nn.Module):
 
 class Tsallis15TopK(torch.nn.Module):
 
-    def __init__(self, dim=0, k=100):
+    def __init__(self, dim=0, k=512):
         self.dim = dim
         self.k = k
         super(Tsallis15TopK, self).__init__()
@@ -322,7 +322,7 @@ class Tsallis15TopK(torch.nn.Module):
 
 class LogTsallis15TopK(torch.nn.Module):
 
-    def __init__(self, dim=0, k=100):
+    def __init__(self, dim=0, k=512):
         self.dim = dim
         self.k = k
         super(LogTsallis15TopK, self).__init__()
