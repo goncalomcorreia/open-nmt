@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import pickle
 
 import torch
 import torch.nn as nn
@@ -104,6 +105,7 @@ class Validator(object):
                          (shannon_entropy(layer) / layer.size(0)).sum(0).view(
                             -1)).masked_select(src_non_pad)
 
+                    # JS Div
                     stats['JS_div_enc_self_layer_%i' % (ii)] += \
                         (JS_div /
                             torch.log(
@@ -185,6 +187,59 @@ class Validator(object):
                 stats['JS_div_self_layer_%i' % (ii)] /= N_JS_div
                 stats['JS_div_context_layer_%i' % (ii)] /= N_JS_div
 
+            # NORMS
+            for ii, layer in enumerate(self_attn):
+                # Norm of output attention layer (head choosing)
+                w_o = \
+                    self.model.encoder.transformer[
+                        ii].self_attn.final_linear.weight
+                n_heads = \
+                    self.model.encoder.transformer[
+                        ii].self_attn.head_count
+                model_dim = w_o.size(0)
+                head_size = model_dim // n_heads
+                w_o = \
+                    w_o.view(
+                        model_dim, n_heads, head_size).transpose(
+                            0, 1).contiguous().view(
+                                n_heads, -1)
+                stats['norm_enc_self_layer_%i' % (ii)] = \
+                    w_o.norm(dim=1).tolist()
+
+                # Decoder
+                w_o = \
+                    self.model.decoder.transformer_layers[
+                        ii].self_attn.final_linear.weight
+                n_heads = \
+                    self.model.decoder.transformer_layers[
+                        ii].self_attn.head_count
+                model_dim = w_o.size(0)
+                head_size = model_dim // n_heads
+                w_o = \
+                    w_o.view(
+                        model_dim, n_heads, head_size).transpose(
+                            0, 1).contiguous().view(
+                                n_heads, -1)
+                stats['norm_self_layer_%i' % (ii)] = \
+                    w_o.norm(dim=1).tolist()
+
+                # Context Att
+                w_o = \
+                    self.model.decoder.transformer_layers[
+                        ii].context_attn.final_linear.weight
+                n_heads = \
+                    self.model.decoder.transformer_layers[
+                        ii].context_attn.head_count
+                model_dim = w_o.size(0)
+                head_size = model_dim // n_heads
+                w_o = \
+                    w_o.view(
+                        model_dim, n_heads, head_size).transpose(
+                            0, 1).contiguous().view(
+                                n_heads, -1)
+                stats['norm_context_layer_%i' % (ii)] = \
+                    w_o.norm(dim=1).tolist()
+
         return stats
 
 
@@ -259,11 +314,16 @@ def main(opt):
         if opt.verbose:
             print(model.decoder.attn)
             print(model.generator)
-
+        model_opt = checkpoint['opt']
+        model_opt.accum_count = [1]
         valid_iter = build_dataset_iter(
             "valid", fields, checkpoint['opt'], is_train=False)
 
         valid_stats = validator.validate(valid_iter)
+
+        if opt.stats_file:
+            with open(opt.stats_file, 'wb') as f:
+                pickle.dump(valid_stats, f)
         # print('avg. attended positions/tgt word: {}'.format(
         #     valid_stats['attended'] / valid_stats['tgt_words']))
         print('avg. support size: {}'.format(
@@ -411,5 +471,6 @@ if __name__ == "__main__":
     parser.add_argument('-batch_size', default=64, type=int)
     parser.add_argument('-k', default=0, type=int)
     parser.add_argument('-bisect_iter', default=0, type=int)
+    parser.add_argument('-stats_file', default=None, type=str)
     opt = parser.parse_args()
     main(opt)
