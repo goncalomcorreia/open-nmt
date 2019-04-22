@@ -32,7 +32,7 @@ class Validator(object):
         """
         # Set model in validating mode.
         stats = {'support': 0, 'tgt_words': 0, 'src_words': 0,
-                 'attended': 0, 'attended_possible': 0,
+                 'attended': 0, 'context_attended_possible': 0,
                  'self_attended_possible': 0,
                  'enc_self_attended_possible': 0}
         N_JS_div_enc = 0
@@ -54,7 +54,7 @@ class Validator(object):
                 tgt_lengths = tgt[1:].squeeze(2).ne(
                     self.tgt_padding_idx).sum(dim=0)
                 grid_sizes = src_lengths * tgt_lengths
-                stats['attended_possible'] += grid_sizes.sum().item()
+                stats['context_attended_possible'] += grid_sizes.sum().item()
 
                 self_grid_sizes = tgt_lengths * (tgt_lengths + 1) / 2
                 stats['self_attended_possible'] += self_grid_sizes.sum().item()
@@ -296,7 +296,7 @@ def load_model(checkpoint, fields, k=0, bisect_iter=0, gpu=False):
 
 def main(opt):
     # Build model.
-    for path in opt.models:
+    for ith_model, path in enumerate(opt.models):
         checkpoint = torch.load(
             path,
             map_location=lambda storage, loc: storage)
@@ -322,7 +322,7 @@ def main(opt):
         valid_stats = validator.validate(valid_iter)
 
         if opt.stats_file:
-            with open(opt.stats_file, 'wb') as f:
+            with open(opt.stats_file[ith_model], 'wb') as f:
                 pickle.dump(valid_stats, f)
         # print('avg. attended positions/tgt word: {}'.format(
         #     valid_stats['attended'] / valid_stats['tgt_words']))
@@ -358,7 +358,7 @@ def main(opt):
             union_of_heads = \
                 valid_stats[
                     'head_sum_enc_self_layer_%i' % (ii)
-                    ] / valid_stats['attended_possible']
+                    ] / valid_stats['enc_self_attended_possible']
             print(
                 ('sum of heads enc_self att density in layer %i: {}'
                  % (ii)
@@ -401,7 +401,7 @@ def main(opt):
             union_of_heads = \
                 valid_stats[
                     'head_sum_self_layer_%i' % (ii)
-                    ] / valid_stats['attended_possible']
+                    ] / valid_stats['self_attended_possible']
             print(
                 ('sum of heads self att density in layer %i: {}'
                  % (ii)
@@ -422,7 +422,7 @@ def main(opt):
         for ii in range(valid_stats['n_layers']):
 
             density_per_head = \
-                [x / valid_stats['attended_possible']
+                [x / valid_stats['context_attended_possible']
                  for x in valid_stats['context_layer_%i' % (ii)]]
 
             density_per_head.sort()
@@ -445,7 +445,7 @@ def main(opt):
             union_of_heads = \
                 valid_stats[
                     'head_sum_context_layer_%i' % (ii)
-                    ] / valid_stats['attended_possible']
+                    ] / valid_stats['context_attended_possible']
             print(
                 ('sum of heads context att density in layer %i: {}'
                  % (ii)
@@ -471,6 +471,6 @@ if __name__ == "__main__":
     parser.add_argument('-batch_size', default=64, type=int)
     parser.add_argument('-k', default=0, type=int)
     parser.add_argument('-bisect_iter', default=0, type=int)
-    parser.add_argument('-stats_file', default=None, type=str)
+    parser.add_argument('-stats_file', nargs='+', default=None, type=str)
     opt = parser.parse_args()
     main(opt)
