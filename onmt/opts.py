@@ -154,6 +154,9 @@ def model_opts(parser):
               help='Size of hidden transformer feed-forward')
     group.add('--no_attn_drop', '-no_attn_drop', action="store_true",
               help='Drop attn probabilities.')
+    group.add('--head_choosing', '-head_choosing',
+              type=str, default="none",
+              choices=["none", "simple", "conditioned"])
 
     # Generator and loss options.
     group.add('--copy_attn', '-copy_attn', action="store_true",

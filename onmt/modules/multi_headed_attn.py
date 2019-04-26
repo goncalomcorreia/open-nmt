@@ -51,7 +51,7 @@ class MultiHeadedAttention(nn.Module):
 
     def __init__(self, head_count, model_dim, dropout=0.1,
                  max_relative_positions=0, attn_func="softmax",
-                 no_attn_drop=False):
+                 no_attn_drop=False, head_choosing='none'):
         assert model_dim % head_count == 0
         self.dim_per_head = model_dim // head_count
         self.model_dim = model_dim
@@ -67,16 +67,25 @@ class MultiHeadedAttention(nn.Module):
                                       head_count * self.dim_per_head)
 
         if attn_func == 'softmax':
-            self.softmax = nn.Softmax(dim=-1)
+            self.attn_func = nn.Softmax(dim=-1)
         elif attn_func == 'sparsemax':
-            self.softmax = Sparsemax(dim=-1)
+            self.attn_func = Sparsemax(dim=-1)
         elif attn_func == 'entmax':
-            self.softmax = Tsallis15(dim=-1)
+            self.attn_func = Tsallis15(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
         self.no_attn_drop = no_attn_drop
 
         self.max_relative_positions = max_relative_positions
+
+        self.head_choosing_type = head_choosing
+        self.head_count = head_count
+        if self.head_choosing_type == 'simple':
+            self.head_choosers = nn.Parameter(torch.Tensor(head_count, 2))
+            self.hard_sigmoid = Sparsemax(dim=-1)
+        elif self.head_choosing_type == 'conditioned':
+            self.head_choosers = nn.Linear(model_dim*2, head_count*2)
+            self.hard_sigmoid = Sparsemax(dim=-1)
 
         if max_relative_positions > 0:
             vocab_size = max_relative_positions * 2 + 1
@@ -209,10 +218,28 @@ class MultiHeadedAttention(nn.Module):
             scores = scores.masked_fill(mask, -1e18)
 
         # 3) Apply attention dropout and compute context vectors.
-        attn = self.softmax(scores).to(query.dtype)
+        attn = self.attn_func(scores).to(query.dtype)
         drop_attn = attn if self.no_attn_drop else self.dropout(attn)
 
         context_original = torch.matmul(drop_attn, value)
+
+        if self.head_choosing_type == 'simple':
+            head_gates = self.hard_sigmoid(self.head_choosers)
+            context_original = \
+                head_gates[:, 0].unsqueeze(0).unsqueeze(-1).unsqueeze(-1) * \
+                context_original
+        elif self.head_choosing_type == 'conditioned':
+            head_choose_cond = torch.cat(
+                [unshape(query), unshape(context_original)],
+                dim=-1)
+            head_choosers = self.head_choosers(head_choose_cond)
+            head_gates = \
+                self.hard_sigmoid(
+                    head_choosers.view(
+                        batch_size, query_len, self.head_count, 2))
+            context_original = \
+                head_gates[:, :, :, 0].transpose(-1, -2).unsqueeze(-1) \
+                * context_original
 
         if self.max_relative_positions > 0 and type == "self":
             context = unshape(context_original
