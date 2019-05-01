@@ -137,7 +137,7 @@ def model_opts(parser):
                    "dotprod or general (Luong) or MLP (Bahdanau)")
     group.add('--global_attention_function', '-global_attention_function',
               type=str, default="softmax",
-              choices=["softmax", "sparsemax", "entmax"])
+              choices=["softmax", "sparsemax", "entmax", "entmax_alpha"])
     group.add('--self_attn_type', '-self_attn_type',
               type=str, default="scaled-dot",
               help='Self attention type in Transformer decoder '

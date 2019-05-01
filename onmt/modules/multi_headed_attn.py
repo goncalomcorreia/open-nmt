@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from onmt.utils.misc import generate_relative_positions_matrix,\
                             relative_matmul
-from onmt.modules.sparse_activations import Sparsemax, Tsallis15
+from onmt.modules.sparse_activations import Sparsemax, Tsallis15, EntmaxAlpha
 # from onmt.utils.misc import aeq
 
 
@@ -72,6 +72,9 @@ class MultiHeadedAttention(nn.Module):
             self.attn_func = Sparsemax(dim=-1)
         elif attn_func == 'entmax':
             self.attn_func = Tsallis15(dim=-1)
+        elif attn_func == 'entmax_alpha':
+            self.pre_alpha = nn.Parameter(torch.FloatTensor([0.0]))
+            self.attn_func = EntmaxAlpha(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
         self.no_attn_drop = no_attn_drop
@@ -218,7 +221,13 @@ class MultiHeadedAttention(nn.Module):
             scores = scores.masked_fill(mask, -1e18)
 
         # 3) Apply attention dropout and compute context vectors.
-        attn = self.attn_func(scores).to(query.dtype)
+        if isinstance(self.attn_func, EntmaxAlpha):
+            scores = scores.view(-1, key_len)
+            attn = self.attn_func(scores, self.pre_alpha).to(query.dtype)
+            attn = attn.view(batch_size, self.head_count, query_len, -1)
+        else:
+            attn = self.attn_func(scores).to(query.dtype)
+
         drop_attn = attn if self.no_attn_drop else self.dropout(attn)
 
         context_original = torch.matmul(drop_attn, value)
