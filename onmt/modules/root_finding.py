@@ -120,5 +120,74 @@ class TsallisBisectFunction(Function):
         return dX, None, None
 
 
+class TsallisBisectAlphaFunction(Function):
+
+    @staticmethod
+    def forward(ctx, X, alpha, n_iter=25, ensure_sum_one=True):
+
+        ctx.alpha = alpha
+        ctx.dim = dim = 1
+        d = X.shape[dim]
+
+        X = X * (alpha - 1)
+
+        max_val, _ = X.max(dim=dim, keepdim=True)
+
+        # minv = _tsallis_gp(0, alpha)
+
+        tau_lo = max_val - _tsallis_gp(1, alpha)
+        tau_hi = max_val - _tsallis_gp(1 / d, alpha)
+
+        f_lo = _tsallis_p(X - tau_lo, alpha).sum(dim) - 1
+        # f_hi = _tsallis_p(X - tau_hi, alpha).sum(dim) - 1
+
+        dm = tau_hi - tau_lo
+
+        for it in range(n_iter):
+
+            dm /= 2
+            tau_m = tau_lo + dm
+            p_m = _tsallis_p(X - tau_m, alpha)
+            f_m = p_m.sum(dim) - 1
+
+            mask = (f_m * f_lo >= 0).unsqueeze(dim)
+            tau_lo = torch.where(mask, tau_m, tau_lo)
+
+        if ensure_sum_one:
+            p_m /= p_m.sum(dim=1).unsqueeze(dim=1)
+
+        ctx.save_for_backward(p_m)
+
+        return p_m
+
+    @staticmethod
+    def backward(ctx, dP):
+        P, = ctx.saved_tensors
+
+        gppr = torch.where(P > 0, P ** (2 - ctx.alpha), P.new_zeros(1))
+
+        dX = dP * gppr
+        q = dX.sum(ctx.dim) / gppr.sum(ctx.dim)
+        q = q.unsqueeze(ctx.dim)
+        dX -= q * gppr
+
+        # alpha gradient computation
+        # d_alpha = (partial_p / partial_alpha) * dP
+        # NOTE: ensure alpha is not close to 1
+        # since there is an indetermination
+        batch_size, dim = dP.shape
+
+        # shannon terms
+        S = torch.where(P > 0, P * torch.log(P), P.new_zeros(1))
+        # shannon entropy
+        ent = S.sum(ctx.dim).unsqueeze(-1)
+        P_skewed = gppr / gppr.sum(ctx.dim).unsqueeze(-1)
+        d_alpha = dP * (P - P_skewed) / ((ctx.alpha - 1) ** 2)
+        d_alpha -= dP * (S - P_skewed * ent) / (ctx.alpha - 1)
+
+        return dX, d_alpha.sum(), None
+
+
 sparsemax_bisect = SparsemaxBisectFunction.apply
 tsallis_bisect = TsallisBisectFunction.apply
+entmax_alpha_bisect = TsallisBisectAlphaFunction.apply

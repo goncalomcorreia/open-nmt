@@ -7,7 +7,8 @@ By Ben Peters and Vlad Niculae
 import torch
 from torch.autograd import Function
 import torch.nn as nn
-from onmt.modules.root_finding import tsallis_bisect, sparsemax_bisect
+from onmt.modules.root_finding \
+    import tsallis_bisect, sparsemax_bisect, entmax_alpha_bisect
 
 
 def _make_ix_like(input, dim=0):
@@ -287,6 +288,23 @@ class Tsallis15TopKFunction(Tsallis15Function):
 
 tsallis15 = Tsallis15Function.apply
 tsallis15_topk = Tsallis15TopKFunction.apply
+
+
+class EntmaxAlpha(torch.nn.Module):
+
+    def __init__(self, n_iter=25, dim=0):
+        self.dim = dim
+        self.n_iter = n_iter
+        super(EntmaxAlpha, self).__init__()
+
+    def forward(self, X, pre_alpha):
+        assert X.dim() == 2
+        alpha = 1 + torch.sigmoid(pre_alpha).squeeze()
+
+        p_star = entmax_alpha_bisect(X, alpha, self.n_iter)
+        # p_star /= p_star.sum(dim=1).unsqueeze(dim=1)
+
+        return p_star / p_star.sum(dim=1).unsqueeze(dim=1)
 
 
 class Tsallis15(torch.nn.Module):
