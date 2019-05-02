@@ -206,6 +206,7 @@ class Trainer(object):
 
         total_stats = onmt.utils.Statistics()
         report_stats = onmt.utils.Statistics()
+
         self._start_report_manager(start_time=total_stats.start_time)
 
         if self.n_gpu > 1:
@@ -431,6 +432,7 @@ class Trainer(object):
         see `onmt.utils.ReportManagerBase.report_training` for doc
         """
         if self.report_manager is not None:
+            report_stats = self.get_extra_statistics(report_stats)
             return self.report_manager.report_training(
                 step, num_steps, learning_rate, report_stats,
                 multigpu=self.n_gpu > 1)
@@ -445,3 +447,33 @@ class Trainer(object):
             return self.report_manager.report_step(
                 learning_rate, step, train_stats=train_stats,
                 valid_stats=valid_stats)
+
+    def get_extra_statistics(self, report_stats):
+
+        alpha_encoder_self = []
+
+        for self_layer in self.model.encoder.transformer:
+            if not hasattr(self_layer.self_attn.attn_func, 'alpha'):
+                return report_stats
+
+            alpha_encoder_self.append(
+                self_layer.self_attn.attn_func.alpha.item())
+
+        alpha_decoder_self = []
+
+        for self_layer in self.model.decoder.transformer_layers:
+            alpha_decoder_self.append(
+                self_layer.self_attn.attn_func.alpha.item())
+
+        alpha_decoder_context = []
+
+        for context_layer in self.model.decoder.transformer_layers:
+            alpha_decoder_context.append(
+                context_layer.context_attn.attn_func.alpha.item())
+
+        report_stats.alphas = {
+            'alpha_encoder_self': alpha_encoder_self,
+            'alpha_decoder_self': alpha_decoder_self,
+            'alpha_decoder_context': alpha_decoder_context}
+
+        return report_stats

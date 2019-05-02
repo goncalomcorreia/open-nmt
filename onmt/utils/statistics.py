@@ -113,6 +113,7 @@ class Statistics(object):
         step_fmt = "%2d" % step
         if num_steps > 0:
             step_fmt = "%s/%5d" % (step_fmt, num_steps)
+
         logger.info(
             ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +
              "lr: %7.5f; %3.0f/%3.0f tok/s; %6.0f sec")
@@ -134,3 +135,10 @@ class Statistics(object):
         writer.add_scalar(prefix + "/accuracy", self.accuracy(), step)
         writer.add_scalar(prefix + "/tgtper", self.n_words / t, step)
         writer.add_scalar(prefix + "/lr", learning_rate, step)
+
+        if hasattr(self, 'alphas'):
+            for nn_block, alpha_list in self.alphas.items():
+                for ii, alpha in enumerate(alpha_list):
+                    writer.add_scalar(
+                        prefix + "/" + nn_block + "_%i" % (ii+1, ),
+                        learning_rate, step)
