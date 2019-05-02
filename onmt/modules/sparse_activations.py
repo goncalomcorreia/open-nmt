@@ -290,21 +290,33 @@ tsallis15 = Tsallis15Function.apply
 tsallis15_topk = Tsallis15TopKFunction.apply
 
 
+class AlphaChooser(torch.nn.Module):
+
+    def __init__(self):
+        super(AlphaChooser, self).__init__()
+        self.pre_alpha = nn.Parameter(torch.randn(1))
+
+    def forward(self):
+        alpha = 1 + torch.sigmoid(self.pre_alpha)
+        return torch.clamp(alpha, min=1.01, max=2).squeeze()
+
+
 class EntmaxAlpha(torch.nn.Module):
 
     def __init__(self, n_iter=25, dim=0):
+        super(EntmaxAlpha, self).__init__()
         self.dim = dim
         self.n_iter = n_iter
-        super(EntmaxAlpha, self).__init__()
+        self.alpha_chooser = AlphaChooser()
 
-    def forward(self, X, pre_alpha):
-        assert X.dim() == 2
-        alpha = 1 + torch.sigmoid(pre_alpha).squeeze()
+    def forward(self, X):
+        batch_size, head_count, query_len, key_len = X.size()
 
-        p_star = entmax_alpha_bisect(X, alpha, self.n_iter)
-        # p_star /= p_star.sum(dim=1).unsqueeze(dim=1)
+        X = X.view(-1, key_len)
+        self.alpha = self.alpha_chooser()
+        p_star = entmax_alpha_bisect(X, self.alpha, self.n_iter)
 
-        return p_star / p_star.sum(dim=1).unsqueeze(dim=1)
+        return p_star.view(batch_size, head_count, query_len, -1)
 
 
 class Tsallis15(torch.nn.Module):
