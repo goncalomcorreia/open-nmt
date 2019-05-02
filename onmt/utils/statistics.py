@@ -141,4 +141,4 @@ class Statistics(object):
                 for ii, alpha in enumerate(alpha_list):
                     writer.add_scalar(
                         prefix + "/" + nn_block + "_%i" % (ii+1, ),
-                        learning_rate, step)
+                        alpha, step)
