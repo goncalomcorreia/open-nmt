@@ -138,7 +138,11 @@ class Statistics(object):
 
         if hasattr(self, 'alphas'):
             for nn_block, alpha_list in self.alphas.items():
-                for ii, alpha in enumerate(alpha_list):
-                    writer.add_scalar(
-                        prefix + "/" + nn_block + "_%i" % (ii+1, ),
-                        alpha, step)
+                for ii, alphas in enumerate(alpha_list):
+                    for jj, alpha in enumerate(alphas):
+                        writer.add_scalar(
+                            prefix
+                            + "/"
+                            + nn_block
+                            + "_layer_%i_head_%i" % (ii+1, jj+1),
+                            alpha, step)

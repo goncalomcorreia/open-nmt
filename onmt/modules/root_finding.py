@@ -125,6 +125,7 @@ class TsallisBisectAlphaFunction(Function):
     @staticmethod
     def forward(ctx, X, alpha, n_iter=25, ensure_sum_one=True):
 
+        alpha = alpha.unsqueeze(-1)
         ctx.alpha = alpha
         ctx.dim = dim = 1
         d = X.shape[dim]
@@ -185,7 +186,7 @@ class TsallisBisectAlphaFunction(Function):
         d_alpha = dP * (P - P_skewed) / ((ctx.alpha - 1) ** 2)
         d_alpha -= dP * (S - P_skewed * ent) / (ctx.alpha - 1)
 
-        return dX, d_alpha.sum(), None
+        return dX, d_alpha.sum(-1), None
 
 
 sparsemax_bisect = SparsemaxBisectFunction.apply

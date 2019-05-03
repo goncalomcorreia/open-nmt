@@ -455,21 +455,20 @@ class Trainer(object):
         for self_layer in self.model.encoder.transformer:
             if not hasattr(self_layer.self_attn.attn_func, 'alpha'):
                 return report_stats
-
-            alpha_encoder_self.append(
-                self_layer.self_attn.attn_func.alpha.item())
+            alphas = self_layer.self_attn.attn_func.alpha.tolist()
+            alpha_encoder_self.append(alphas)
 
         alpha_decoder_self = []
 
         for self_layer in self.model.decoder.transformer_layers:
-            alpha_decoder_self.append(
-                self_layer.self_attn.attn_func.alpha.item())
+            alphas = self_layer.self_attn.attn_func.alpha.tolist()
+            alpha_decoder_self.append(alphas)
 
         alpha_decoder_context = []
 
         for context_layer in self.model.decoder.transformer_layers:
-            alpha_decoder_context.append(
-                context_layer.context_attn.attn_func.alpha.item())
+            alphas = context_layer.context_attn.attn_func.alpha.tolist()
+            alpha_decoder_context.append(alphas)
 
         report_stats.alphas = {
             'alpha_encoder_self': alpha_encoder_self,

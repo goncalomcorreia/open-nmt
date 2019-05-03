@@ -73,7 +73,8 @@ class MultiHeadedAttention(nn.Module):
         elif attn_func == 'entmax':
             self.attn_func = Tsallis15(dim=-1)
         elif attn_func == 'entmax_alpha':
-            self.attn_func = EntmaxAlpha(dim=-1)
+            self.attn_func = EntmaxAlpha(
+                head_count=head_count, dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
         self.no_attn_drop = no_attn_drop

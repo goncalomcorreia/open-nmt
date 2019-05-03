@@ -292,29 +292,32 @@ tsallis15_topk = Tsallis15TopKFunction.apply
 
 class AlphaChooser(torch.nn.Module):
 
-    def __init__(self):
+    def __init__(self, head_count):
         super(AlphaChooser, self).__init__()
-        self.pre_alpha = nn.Parameter(torch.randn(1))
+        self.pre_alpha = nn.Parameter(torch.randn(head_count))
 
     def forward(self):
         alpha = 1 + torch.sigmoid(self.pre_alpha)
-        return torch.clamp(alpha, min=1.01, max=2).squeeze()
+        return torch.clamp(alpha, min=1.01, max=2)
 
 
 class EntmaxAlpha(torch.nn.Module):
 
-    def __init__(self, n_iter=25, dim=0):
+    def __init__(self, head_count, n_iter=25, dim=0):
         super(EntmaxAlpha, self).__init__()
         self.dim = dim
         self.n_iter = n_iter
-        self.alpha_chooser = AlphaChooser()
+        self.alpha_chooser = AlphaChooser(head_count)
 
     def forward(self, X):
         batch_size, head_count, query_len, key_len = X.size()
 
         X = X.view(-1, key_len)
         self.alpha = self.alpha_chooser()
-        p_star = entmax_alpha_bisect(X, self.alpha, self.n_iter)
+        expanded_alpha = self.alpha.unsqueeze(0).unsqueeze(-1)
+        expanded_alpha = expanded_alpha.expand((batch_size, -1, query_len))
+        expanded_alpha = expanded_alpha.contiguous().view(-1)
+        p_star = entmax_alpha_bisect(X, expanded_alpha, self.n_iter)
 
         return p_star.view(batch_size, head_count, query_len, -1)
 
