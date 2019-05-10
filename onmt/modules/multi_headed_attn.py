@@ -11,10 +11,17 @@ from onmt.modules.sparse_activations import Sparsemax, Tsallis15, EntmaxAlpha
 
 class HeadChooser(torch.nn.Module):
 
-    def __init__(self, head_count):
+    def __init__(self, head_count, sigmoid_type):
         super(HeadChooser, self).__init__()
         self.head_choosers = nn.Parameter(torch.randn(head_count, 2))
-        self.hard_sigmoid = Tsallis15(dim=-1)
+
+        if "sparse" in sigmoid_type:
+            self.hard_sigmoid = Sparsemax(dim=-1)
+        elif "ent" in sigmoid_type:
+            self.hard_sigmoid = Tsallis15(dim=-1)
+        elif "alpha" in sigmoid_type:
+            self.hard_sigmoid = EntmaxAlpha(
+                head_count=head_count, dim=-1)
 
     def forward(self, context_original):
         self.head_gates = self.hard_sigmoid(self.head_choosers)
@@ -99,8 +106,9 @@ class MultiHeadedAttention(nn.Module):
 
         self.head_choosing_type = head_choosing
         self.head_count = head_count
-        if self.head_choosing_type == 'simple':
-            self.head_chooser = HeadChooser(head_count)
+        if 'simple' in self.head_choosing_type:
+            self.head_chooser = HeadChooser(
+                head_count, self.head_choosing_type)
         # elif self.head_choosing_type == 'conditioned':
         #     self.head_choosers = nn.Linear(model_dim*2, head_count*2)
         #     self.hard_sigmoid = Tsallis15(dim=-1)
@@ -241,7 +249,7 @@ class MultiHeadedAttention(nn.Module):
 
         context_original = torch.matmul(drop_attn, value)
 
-        if self.head_choosing_type == 'simple':
+        if 'simple' in self.head_choosing_type:
             context_original = self.head_chooser(context_original)
         # elif self.head_choosing_type == 'conditioned':
         #     head_choose_cond = torch.cat(

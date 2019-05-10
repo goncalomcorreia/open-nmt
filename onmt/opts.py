@@ -156,7 +156,9 @@ def model_opts(parser):
               help='Drop attn probabilities.')
     group.add('--head_choosing', '-head_choosing',
               type=str, default="none",
-              choices=["none", "simple", "conditioned"])
+              choices=[
+               "none", "simple_sparse", "simple_ent", "simple_alpha",
+               "conditioned"])
 
     # Generator and loss options.
     group.add('--copy_attn', '-copy_attn', action="store_true",
