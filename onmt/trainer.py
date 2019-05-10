@@ -450,29 +450,67 @@ class Trainer(object):
 
     def get_extra_statistics(self, report_stats):
 
-        alpha_encoder_self = []
+        if hasattr(
+                self.model.encoder.transformer[0].self_attn.attn_func,
+                'alpha'):
+            alpha_encoder_self = []
+        else:
+            alpha_encoder_self = None
+
+        if hasattr(
+                self.model.encoder.transformer[0].self_attn,
+                'head_chooser'):
+            gates_encoder_self = []
+        else:
+            gates_encoder_self = None
+
+        if alpha_encoder_self is not None and gates_encoder_self is not None:
+            return report_stats
 
         for self_layer in self.model.encoder.transformer:
-            if not hasattr(self_layer.self_attn.attn_func, 'alpha'):
-                return report_stats
-            alphas = self_layer.self_attn.attn_func.alpha.tolist()
-            alpha_encoder_self.append(alphas)
+            if alpha_encoder_self is not None:
+                alphas = self_layer.self_attn.attn_func.alpha.tolist()
+                alpha_encoder_self.append(alphas)
+            if gates_encoder_self is not None:
+                head_gates = \
+                    self_layer.self_attn.head_chooser.head_gates[:, 0].tolist()
+                gates_encoder_self.append(head_gates)
 
         alpha_decoder_self = []
+        gates_decoder_self = []
 
         for self_layer in self.model.decoder.transformer_layers:
-            alphas = self_layer.self_attn.attn_func.alpha.tolist()
-            alpha_decoder_self.append(alphas)
+            if alpha_encoder_self is not None:
+                alphas = self_layer.self_attn.attn_func.alpha.tolist()
+                alpha_decoder_self.append(alphas)
+            if gates_encoder_self is not None:
+                head_gates = \
+                    self_layer.self_attn.head_chooser.head_gates[:, 0].tolist()
+                gates_decoder_self.append(head_gates)
 
         alpha_decoder_context = []
+        gates_decoder_context = []
 
         for context_layer in self.model.decoder.transformer_layers:
-            alphas = context_layer.context_attn.attn_func.alpha.tolist()
-            alpha_decoder_context.append(alphas)
+            if alpha_encoder_self is not None:
+                alphas = context_layer.context_attn.attn_func.alpha.tolist()
+                alpha_decoder_context.append(alphas)
+            if gates_encoder_self is not None:
+                head_gates = \
+                    context_layer.self_attn.head_chooser.head_gates[
+                        :, 0].tolist()
+                gates_decoder_context.append(head_gates)
 
-        report_stats.alphas = {
-            'alpha_encoder_self': alpha_encoder_self,
-            'alpha_decoder_self': alpha_decoder_self,
-            'alpha_decoder_context': alpha_decoder_context}
+        if alpha_encoder_self is not None:
+            report_stats.alphas = {
+                'alpha_encoder_self': alpha_encoder_self,
+                'alpha_decoder_self': alpha_decoder_self,
+                'alpha_decoder_context': alpha_decoder_context}
+
+        if gates_encoder_self is not None:
+            report_stats.gates = {
+                'gates_encoder_self': gates_encoder_self,
+                'gates_decoder_self': gates_decoder_self,
+                'gates_decoder_context': gates_decoder_context}
 
         return report_stats

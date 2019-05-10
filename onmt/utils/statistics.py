@@ -146,3 +146,14 @@ class Statistics(object):
                             + nn_block
                             + "_layer_%i_head_%i" % (ii+1, jj+1),
                             alpha, step)
+
+        if hasattr(self, 'gates'):
+            for nn_block, gate_list in self.gates.items():
+                for ii, gates in enumerate(gate_list):
+                    for jj, gate in enumerate(gates):
+                        writer.add_scalar(
+                            prefix
+                            + "/"
+                            + nn_block
+                            + "_layer_%i_head_%i" % (ii+1, jj+1),
+                            gate, step)
