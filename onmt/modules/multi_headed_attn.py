@@ -9,6 +9,22 @@ from onmt.modules.sparse_activations import Sparsemax, Tsallis15, EntmaxAlpha
 # from onmt.utils.misc import aeq
 
 
+class HeadChooser(torch.nn.Module):
+
+    def __init__(self, head_count):
+        super(HeadChooser, self).__init__()
+        self.head_choosers = nn.Parameter(torch.randn(head_count, 2))
+        self.hard_sigmoid = Tsallis15(dim=-1)
+
+    def forward(self, context_original):
+        self.head_gates = self.hard_sigmoid(self.head_choosers)
+        context_original = \
+            self.head_gates[
+                :, 0].unsqueeze(0).unsqueeze(-1).unsqueeze(-1) * \
+            context_original
+        return context_original
+
+
 class MultiHeadedAttention(nn.Module):
     """Multi-Head Attention module from "Attention is All You Need"
     :cite:`DBLP:journals/corr/VaswaniSPUJGKP17`.
@@ -84,11 +100,10 @@ class MultiHeadedAttention(nn.Module):
         self.head_choosing_type = head_choosing
         self.head_count = head_count
         if self.head_choosing_type == 'simple':
-            self.head_choosers = nn.Parameter(torch.Tensor(head_count, 2))
-            self.hard_sigmoid = Sparsemax(dim=-1)
-        elif self.head_choosing_type == 'conditioned':
-            self.head_choosers = nn.Linear(model_dim*2, head_count*2)
-            self.hard_sigmoid = Sparsemax(dim=-1)
+            self.head_chooser = HeadChooser(head_count)
+        # elif self.head_choosing_type == 'conditioned':
+        #     self.head_choosers = nn.Linear(model_dim*2, head_count*2)
+        #     self.hard_sigmoid = Tsallis15(dim=-1)
 
         if max_relative_positions > 0:
             vocab_size = max_relative_positions * 2 + 1
@@ -227,22 +242,19 @@ class MultiHeadedAttention(nn.Module):
         context_original = torch.matmul(drop_attn, value)
 
         if self.head_choosing_type == 'simple':
-            head_gates = self.hard_sigmoid(self.head_choosers)
-            context_original = \
-                head_gates[:, 0].unsqueeze(0).unsqueeze(-1).unsqueeze(-1) * \
-                context_original
-        elif self.head_choosing_type == 'conditioned':
-            head_choose_cond = torch.cat(
-                [unshape(query), unshape(context_original)],
-                dim=-1)
-            head_choosers = self.head_choosers(head_choose_cond)
-            head_gates = \
-                self.hard_sigmoid(
-                    head_choosers.view(
-                        batch_size, query_len, self.head_count, 2))
-            context_original = \
-                head_gates[:, :, :, 0].transpose(-1, -2).unsqueeze(-1) \
-                * context_original
+            context_original = self.head_chooser(context_original)
+        # elif self.head_choosing_type == 'conditioned':
+        #     head_choose_cond = torch.cat(
+        #         [unshape(query), unshape(context_original)],
+        #         dim=-1)
+        #     head_choosers = self.head_choosers(head_choose_cond)
+        #     head_gates = \
+        #         self.hard_sigmoid(
+        #             head_choosers.view(
+        #                 batch_size, query_len, self.head_count, 2))
+        #     context_original = \
+        #         head_gates[:, :, :, 0].transpose(-1, -2).unsqueeze(-1) \
+        #         * context_original
 
         if self.max_relative_positions > 0 and type == "self":
             context = unshape(context_original
